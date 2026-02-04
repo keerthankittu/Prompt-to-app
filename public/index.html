@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Promtify AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Custom scrollbar for a cleaner look */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #1a202c; }
+    ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #718096; }
+    /* Basic transition for smoother UI changes */
+    .transition-all { transition: all 0.3s ease-in-out; }
+  </style>
+</head>
+<body class="bg-gray-900 text-white font-sans flex h-screen">
+
+  <div class="app-container flex w-full h-full">
+
+    <!-- Left Panel: Chat & Controls -->
+    <aside class="panel panel-left w-1/3 flex flex-col bg-gray-800 p-4 border-r border-gray-700">
+      <h1 class="text-2xl font-bold text-cyan-400 mb-4">⚡ Promtify AI</h1>
+      
+      <div id="chat-log" class="chat-log flex-grow overflow-y-auto mb-4 pr-2 space-y-4">
+        <!-- Chat messages will be appended here -->
+        <div class="p-3 rounded-lg bg-gray-700 text-gray-300">
+          Welcome! Describe the web app you want to build. For example, "a simple pomodoro timer" or "a weather app with a search bar".
+        </div>
+      </div>
+
+      <div class="input-wrap relative">
+        <input id="prompt-input" type="text" placeholder="Describe your app…" autocomplete="off" class="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 focus:outline-none focus:ring-2 focus:ring-cyan-500 pr-24"/>
+        <button id="generate-btn" class="absolute right-2 top-1/2 -translate-y-1/2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-4 rounded-md transition-all">
+          Generate
+        </button>
+      </div>
+
+      <div class="presets mt-4">
+        <span class="text-gray-400 text-sm">Examples:</span>
+        <div class="flex flex-wrap gap-2 mt-2">
+            <button class="preset-btn bg-gray-700 hover:bg-gray-600 text-sm py-1 px-3 rounded-full" data-preset="A simple login form with a frosted glass effect">Login Form</button>
+            <button class="preset-btn bg-gray-700 hover:bg-gray-600 text-sm py-1 px-3 rounded-full" data-preset="A functional calculator with a dark theme">Calculator</button>
+            <button class="preset-btn bg-gray-700 hover:bg-gray-600 text-sm py-1 px-3 rounded-full" data-preset="A to-do list app where I can add and remove items">To-Do App</button>
+        </div>
+      </div>
+      
+      <div id="loader" class="hidden flex items-center justify-center mt-4 p-2 bg-blue-900/50 rounded-lg">
+        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Generating with Gemini...</span>
+      </div>
+    </aside>
+
+    <!-- Right Panel: Code / Preview -->
+    <main class="panel panel-right w-2/3 flex flex-col bg-gray-900">
+      <nav class="tabs flex items-center bg-gray-800 border-b border-gray-700 px-4">
+        <button id="show-code-btn" class="tab active py-3 px-4 text-white font-semibold border-b-2 border-cyan-500">Code</button>
+        <button id="show-preview-btn" class="tab py-3 px-4 text-gray-400 font-semibold border-b-2 border-transparent hover:text-white">Preview</button>
+        <div class="ml-auto flex gap-2">
+            <button id="download-btn" class="download bg-gray-700 hover:bg-gray-600 text-sm text-white font-bold py-2 px-3 rounded-md transition-all">Download HTML</button>
+        </div>
+      </nav>
+
+      <section id="code-display" class="content code flex-grow bg-gray-900 overflow-auto">
+        <pre><code class="language-html text-gray-300 p-4 block"></code></pre>
+      </section>
+      <iframe id="preview-frame" class="content preview hidden w-full h-full bg-white" sandbox="allow-scripts allow-forms"></iframe>
+    </main>
+
+  </div>
+
+  <script>
+    const promptInput = document.getElementById('prompt-input');
+    const generateBtn = document.getElementById('generate-btn');
+    const codeDisplay = document.querySelector('#code-display code');
+    const previewFrame = document.getElementById('preview-frame');
+    const loader = document.getElementById('loader');
+    const chatLog = document.getElementById('chat-log');
+
+    const showCodeBtn = document.getElementById('show-code-btn');
+    const showPrevBtn = document.getElementById('show-preview-btn');
+    const downloadBtn = document.getElementById('download-btn');
+
+    let generatedCode = `<!-- Your generated code will appear here -->`;
+
+    // --- Core function to generate code via backend ---
+    async function generateCode() {
+      const prompt = promptInput.value.trim();
+      if (!prompt) {
+        addChatMessage('bot', 'Please enter a description for the app you want to build.');
+        return;
+      }
+
+      loader.classList.remove('hidden');
+      generateBtn.disabled = true;
+      addChatMessage('user', prompt);
+      promptInput.value = '';
+
+      try {
+        const response = await fetch('/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: prompt })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to generate code.');
+        }
+
+        const data = await response.json();
+        generatedCode = data.code;
+        
+        codeDisplay.textContent = generatedCode;
+        previewFrame.srcdoc = generatedCode;
+        
+        addChatMessage('bot', '✔️ Generation complete! Check out the code and preview.');
+        // Automatically switch to preview
+        showPrevBtn.click();
+
+      } catch (error) {
+        console.error(error);
+        addChatMessage('bot', `❌ Error: ${error.message}`);
+      } finally {
+        loader.classList.add('hidden');
+        generateBtn.disabled = false;
+      }
+    }
+
+    function addChatMessage(sender, message) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `p-3 rounded-lg ${sender === 'user' ? 'bg-cyan-800/50 text-right' : 'bg-gray-700'}`;
+        messageDiv.textContent = message;
+        chatLog.appendChild(messageDiv);
+        chatLog.scrollTop = chatLog.scrollHeight; // Auto-scroll to bottom
+    }
+
+    // --- Event Listeners ---
+    generateBtn.addEventListener('click', generateCode);
+    promptInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            generateCode();
+        }
+    });
+
+    showCodeBtn.addEventListener('click', () => {
+      showCodeBtn.classList.add('active', 'text-white', 'border-cyan-500');
+      showCodeBtn.classList.remove('text-gray-400', 'border-transparent');
+      showPrevBtn.classList.remove('active', 'text-white', 'border-cyan-500');
+      showPrevBtn.classList.add('text-gray-400', 'border-transparent');
+      
+      document.getElementById('code-display').classList.remove('hidden');
+      previewFrame.classList.add('hidden');
+    });
+
+    showPrevBtn.addEventListener('click', () => {
+      showPrevBtn.classList.add('active', 'text-white', 'border-cyan-500');
+      showPrevBtn.classList.remove('text-gray-400', 'border-transparent');
+      showCodeBtn.classList.remove('active', 'text-white', 'border-cyan-500');
+      showCodeBtn.classList.add('text-gray-400', 'border-transparent');
+      
+      previewFrame.classList.remove('hidden');
+      document.getElementById('code-display').classList.add('hidden');
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (!generatedCode || generatedCode.startsWith('<!--')) {
+        alert('Please generate some code first!');
+        return;
+      }
+      const blob = new Blob([generatedCode], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'promtify-app.html';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+          promptInput.value = btn.dataset.preset;
+          generateCode();
+      });
+    });
+
+  </script>
+</body>
+</html>
