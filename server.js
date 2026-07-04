@@ -65,6 +65,8 @@ ${prompt}
 
     res.json({ code: generatedCode });
   } catch (err) {
+    console.error("AI Error:", error); 
+    res.json({ code: "" });
     console.error(err);
     res.status(500).json({ error: "AI generation failed" });
   }
