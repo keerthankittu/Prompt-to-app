@@ -22,6 +22,7 @@ app.get("/", (req, res) => {
 });
 
 // Generate app using Gemini
+
 app.post("/generate", async (req, res) => {
   const { prompt } = req.body;
 
@@ -40,13 +41,7 @@ app.post("/generate", async (req, res) => {
             {
               parts: [
                 {
-                  text: `
-Generate ONLY clean HTML, CSS (inside <style>) and JS (inside <script>) code.
-No explanations. Only code.
-
-User request:
-${prompt}
-                  `
+                  text: `Generate ONLY clean HTML, CSS (inside <style>) and JS (inside <script>) code. No explanations. Only code. User request:\n${prompt}`
                 }
               ]
             }
@@ -56,19 +51,31 @@ ${prompt}
     );
 
     const data = await geminiResponse.json();
-    let generatedCode =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
+    // 1. Check if the Google API returned an error structure
+    if (data.error) {
+      console.error("Gemini API Error Payload:", data.error);
+      return res.status(500).json({ error: data.error.message || "Gemini API failure" });
+    }
+
+    // 2. Safely grab the text now that we know there's no explicit error object
+    let generatedCode = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    if (!generatedCode) {
+      return res.status(500).json({ error: "AI returned an empty response." });
+    }
+
+    // Clean markdown blocks
     generatedCode = generatedCode
       .replace(/```html/g, "")
       .replace(/```/g, "");
 
     res.json({ code: generatedCode });
+
   } catch (err) {
-    console.error("AI Error:", error); 
-    res.json({ code: "" });
-    console.error(err);
-    res.status(500).json({ error: "AI generation failed" });
+    // Fixed: changed 'error' to 'err' to match the catch variable
+    console.error("Server Catch Error:", err); 
+    res.status(500).json({ error: "Internal server error during generation" });
   }
 });
 
